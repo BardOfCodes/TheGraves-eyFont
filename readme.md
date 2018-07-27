@@ -10,4 +10,9 @@ A simple implementation of [Generating Sequences With Recurrent Neural Networks]
 
 ## 1: Unconditional Generation:
 
-T.B.A. 
+Simple GRU version implemented.
+To D0:
+
+1) Integrate tensorboardX
+2) Complex architecture
+3) Visualize results.
