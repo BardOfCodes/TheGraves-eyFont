@@ -21,6 +21,7 @@ delta_max = 40.0
 weight_decay=0.0001
 orig_lr = 0.001
 pen_loss_weight = 1
+pen_loss_lambda = 1
 
 ############## log details
 experiment_code_log_folder = 'logs/code' 

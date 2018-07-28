@@ -24,7 +24,8 @@ def plot_stroke(stroke, save_name=None):
 
     cuts = np.where(stroke[:, 0] == 1)[0]
     start = 0
-
+    if cuts.shape[0] ==0:
+        cuts = [stroke.shape[0]]
     for cut_value in cuts:
         ax.plot(x[start:cut_value], y[start:cut_value],
                 'k-', linewidth=3)
@@ -58,8 +59,8 @@ def plot_stroke_numpy(stroke, save_name=None):
     f.set_size_inches(5. * size_x / size_y, 5.)
 
     cuts = np.where(stroke[:, 0] == 1)[0]
-    start = 0
-
+    if cuts.shape[0] ==0:
+        cuts = [stroke.shape[0]]
     for cut_value in cuts:
         ax.plot(x[start:cut_value], y[start:cut_value],
                 'k-', linewidth=3)

@@ -8,11 +8,14 @@ A simple implementation of [Generating Sequences With Recurrent Neural Networks]
 
 3) Handwriting Recognition: Given a sequence of handwritting strokes, it predictes the charaters.
 
+Experiment Docs: [Google Doc](https://docs.google.com/document/d/1HpNZtQtLDDAM9jQ106UIA4NGUZ2Xedkjni9cu1K8n6U/edit?usp=sharing)
+
 ## 1: Unconditional Generation:
 
 Simple GRU version implemented.
-To D0:
 
-1) Integrate tensorboardX
+To Do:
+
+1) ~~Integrate tensorboardX~~
 2) Complex architecture
-3) Visualize results.
+3) ~~Visualize results~~

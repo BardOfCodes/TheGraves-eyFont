@@ -20,9 +20,11 @@ class simple_GRU(nn.Module):
         self.gru_1 = nn.GRU(inp_size, hidden_size_1)
         self.linear = nn.Linear(hidden_size_1,output_size)
         self.hidden_size_1 = hidden_size_1
+        self.inp_size = inp_size
         # for training
         self.drop = nn.Dropout(0.4)
         self.relu = nn.ReLU()
+        self.go = graves_output()
     
     def wt_init(self):
         for name, param in self.named_parameters():
@@ -65,14 +67,34 @@ class simple_GRU(nn.Module):
         
         output = self.linear(inp_linear)
         return output
+    def forward_looped(self,batch_size,pred_limit,cuda=True):
+        if cuda:
+            input = torch.autograd.Variable(torch.zeros(1,batch_size, self.inp_size).cuda()) 
+            hx = torch.autograd.Variable(torch.zeros(1,batch_size, self.hidden_size_1).cuda()) 
+        else:
+            input = torch.autograd.Variable(torch.zeros(1,batch_size, self.hidden_size_1)) 
+            hx = torch.autograd.Variable(torch.zeros(1,batch_size, self.hidden_size_1)) 
+        jter = 0
+        actions = []
+        while (jter<pred_limit):
+            output,hx = self.gru_1(input, hx)
+            output = self.linear(output[0])
+            pen_down_prob,o_pi, o_mu1, o_mu2, o_sigma1, o_sigma2, o_corr = self.go.get_mixture_coef(output)
+            predicted_action = self.go.sample_action(pen_down_prob,o_pi, o_mu1, o_mu2, o_sigma1, o_sigma2, o_corr)
+            actions.append(predicted_action)
+            input = torch.unsqueeze(predicted_action,0)
+            jter+=1
+        actions = torch.stack(actions,0)
+        return actions
+        
     
 class graves_output(nn.Module):
     
-    def __init__(self,pen_loss_weight=gv.pen_loss_weight):
+    def __init__(self,pen_loss_lambda = gv.pen_loss_lambda, pen_loss_weight=gv.pen_loss_weight):
         super(graves_output, self).__init__()
         # add balancing
         self.softmax_loss = torch.nn.BCELoss()
-        self.pen_loss_weight = pen_loss_weight
+        self.pen_loss_lambda = pen_loss_lambda
         
         
     def get_mixture_coef(self,output):

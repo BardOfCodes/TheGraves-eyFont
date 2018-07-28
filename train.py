@@ -24,8 +24,6 @@ def setup(cuda,device_id=0,wt_load='NIL'):
         pass
         # load wts if required.
     
-    graves_output = models.graves_output()
-    
     # Optimizer 
     optimizer = torch.optim.Adam(network.parameters(), gv.orig_lr, weight_decay=gv.weight_decay)
     
@@ -35,7 +33,7 @@ def setup(cuda,device_id=0,wt_load='NIL'):
     train_writer = SummaryWriter(os.path.join(gv.tensorboardX_dir,gv.exp_name,'train'))
     val_writer = SummaryWriter(os.path.join(gv.tensorboardX_dir,gv.exp_name,'val'))
     
-    return train_data_loader, val_data_loader, network, graves_output, optimizer,train_writer,val_writer
+    return train_data_loader, val_data_loader, network, optimizer,train_writer,val_writer
 
 def train(train_data_loader, network, graves_output,optimizer,writer,jter_count):
     
@@ -48,8 +46,8 @@ def train(train_data_loader, network, graves_output,optimizer,writer,jter_count)
         pen_down_gt = torch.autograd.Variable(torch.FloatTensor(cat_target[:,0]).cuda())
         output = network.forward_unlooped(data,cuda=True)
         
-        pen_down_prob,o_pi, o_mu1, o_mu2, o_sigma1, o_sigma2, o_corr = graves_output.get_mixture_coef(output)
-        loss_distr,pen_loss = graves_output.loss_distr(pen_down_prob,o_pi, o_mu1, o_mu2, o_sigma1, o_sigma2, o_corr, x_gt, y_gt,pen_down_gt)
+        pen_down_prob,o_pi, o_mu1, o_mu2, o_sigma1, o_sigma2, o_corr = network.go.get_mixture_coef(output)
+        loss_distr,pen_loss = network.go.loss_distr(pen_down_prob,o_pi, o_mu1, o_mu2, o_sigma1, o_sigma2, o_corr, x_gt, y_gt,pen_down_gt)
         
         total_loss = loss_distr + pen_loss
         
@@ -67,11 +65,11 @@ def train(train_data_loader, network, graves_output,optimizer,writer,jter_count)
             # add the handwriting pred and gt
             first_seq_len = data[0].shape[0]
             output = output[:first_seq_len]
-            predicted_action = graves_output.sample_action(pen_down_prob[:first_seq_len],o_pi[:first_seq_len],
+            predicted_action = network.go.sample_action(pen_down_prob[:first_seq_len],o_pi[:first_seq_len],
                                                            o_mu1[:first_seq_len], o_mu2[:first_seq_len], 
                                                            o_sigma1[:first_seq_len], o_sigma2[:first_seq_len],
                                                            o_corr[:first_seq_len])
-            loss_l2,pen_acc = graves_output.val_loss(predicted_action[:first_seq_len], x_gt[:first_seq_len], 
+            loss_l2,pen_acc = network.go.val_loss(predicted_action[:first_seq_len], x_gt[:first_seq_len], 
                                                      y_gt[:first_seq_len],pen_down_gt[:first_seq_len])
             pred_image = utils.plot_stroke_numpy(predicted_action.cpu().numpy())# .transpose(2,0,1)
             gt_image = utils.plot_stroke_numpy(data_gt[0])# .transpose(2,0,1)
@@ -93,10 +91,10 @@ def val(val_data_loader,network,graves_output,writer,jter_count):
         pen_down_gt = torch.autograd.Variable(torch.FloatTensor(cat_target[:,0]).cuda())
         output = network.forward_unlooped(data,cuda=True)
         
-        pen_down_prob,o_pi, o_mu1, o_mu2, o_sigma1, o_sigma2, o_corr = graves_output.get_mixture_coef(output)
-        loss_distr,pen_loss = graves_output.loss_distr(pen_down_prob,o_pi, o_mu1, o_mu2, o_sigma1, o_sigma2, o_corr, x_gt, y_gt,pen_down_gt)
-        predicted_action = graves_output.sample_action(pen_down_prob,o_pi, o_mu1, o_mu2, o_sigma1, o_sigma2, o_corr)
-        loss_l2,pen_acc = graves_output.val_loss(predicted_action, x_gt, y_gt,pen_down_gt)
+        pen_down_prob,o_pi, o_mu1, o_mu2, o_sigma1, o_sigma2, o_corr = network.graves_output.get_mixture_coef(output)
+        loss_distr,pen_loss = network.go.loss_distr(pen_down_prob,o_pi, o_mu1, o_mu2, o_sigma1, o_sigma2, o_corr, x_gt, y_gt,pen_down_gt)
+        predicted_action = network.go.sample_action(pen_down_prob,o_pi, o_mu1, o_mu2, o_sigma1, o_sigma2, o_corr)
+        loss_l2,pen_acc = network.go.val_loss(predicted_action, x_gt, y_gt,pen_down_gt)
         
         loss_list.append(loss_l2.cpu().data.numpy())
         
