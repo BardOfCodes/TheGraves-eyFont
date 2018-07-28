@@ -9,7 +9,7 @@ train_start_index = 0
 train_end_index = 5000
 val_start_index = 5000
 val_end_index = 5400
-total_epochs = 100
+total_epochs = 10
 
 #################### Network details
 gru_size = 900
@@ -22,5 +22,8 @@ weight_decay=0.0001
 orig_lr = 0.001
 pen_loss_weight = 1
 
-############# train_summary details
+############## log details
+experiment_code_log_folder = 'logs/code' 
+exp_name = "SimpleGRU"
 update_step = 50
+tensorboardX_dir = 'logs/tensorboardX'

@@ -5,12 +5,12 @@ import utils
 import global_variables as gv
 import models
 import argparse
+import os
 import time
-# integrate tensorboardX
-import tensorboardX
+from tensorboardX import SummaryWriter
 import numpy as np
 
-def setup(cuda,device_id=0):
+def setup(cuda,device_id=0,wt_load='NIL'):
     if cuda:
         torch.cuda.set_device(device_id)
     train_data_loader = data_loader.dataloader(gv.batch_limit,gv.train_start_index,gv.train_end_index)
@@ -18,7 +18,11 @@ def setup(cuda,device_id=0):
     network = models.simple_GRU(3,gv.gru_size,121)
     network.cuda()
     # init the network with orthogonal init and gluroot.
-    network.wt_init()
+    if wt_load=="NIL":
+        network.wt_init()
+    else:
+        pass
+        # load wts if required.
     
     graves_output = models.graves_output()
     
@@ -28,31 +32,58 @@ def setup(cuda,device_id=0):
     # for le rumours 
     cudnn.benchmark = True
     
-    return train_data_loader, val_data_loader, network, graves_output, optimizer
+    train_writer = SummaryWriter(os.path.join(gv.tensorboardX_dir,gv.exp_name,'train'))
+    val_writer = SummaryWriter(os.path.join(gv.tensorboardX_dir,gv.exp_name,'val'))
+    
+    return train_data_loader, val_data_loader, network, graves_output, optimizer,train_writer,val_writer
 
-def train(train_data_loader, network, graves_output,optimizer):
+def train(train_data_loader, network, graves_output,optimizer,writer,jter_count):
     
     data_fetcher = train_data_loader.get_data()
+    count = 0
     for jter,(data,data_gt) in enumerate(data_fetcher):
         cat_target = np.concatenate(data_gt,axis=0)
         x_gt = torch.autograd.Variable(torch.FloatTensor(cat_target[:,1]).cuda())
         y_gt = torch.autograd.Variable(torch.FloatTensor(cat_target[:,2]).cuda())
         pen_down_gt = torch.autograd.Variable(torch.FloatTensor(cat_target[:,0]).cuda())
         output = network.forward_unlooped(data,cuda=True)
-        pen_down_prob,o_pi, o_mu1, o_mu2, o_sigma1, o_sigma2, o_corr = graves_output.get_mixture_coef(output)
-        loss_distr = graves_output.loss_distr(pen_down_prob,o_pi, o_mu1, o_mu2, o_sigma1, o_sigma2, o_corr, x_gt, y_gt,pen_down_gt)
         
+        pen_down_prob,o_pi, o_mu1, o_mu2, o_sigma1, o_sigma2, o_corr = graves_output.get_mixture_coef(output)
+        loss_distr,pen_loss = graves_output.loss_distr(pen_down_prob,o_pi, o_mu1, o_mu2, o_sigma1, o_sigma2, o_corr, x_gt, y_gt,pen_down_gt)
+        
+        total_loss = loss_distr + pen_loss
         
         # compute gradient and do SGD step
         optimizer.zero_grad()
-        loss_distr.backward()
+        total_loss.backward()
         optimizer.step()
+        
+        
+        # Summarization
+        utils.write_summaries(['data/LossDistr','data/Lossloss'],[loss_distr,pen_loss],[0,0],writer,jter+jter_count)
         
         if jter%gv.update_step ==0:
             print('cur_iter',jter,"cur_loss",loss_distr.cpu().data.numpy(),'batch_size',len(data))
+            # add the handwriting pred and gt
+            first_seq_len = data[0].shape[0]
+            output = output[:first_seq_len]
+            predicted_action = graves_output.sample_action(pen_down_prob[:first_seq_len],o_pi[:first_seq_len],
+                                                           o_mu1[:first_seq_len], o_mu2[:first_seq_len], 
+                                                           o_sigma1[:first_seq_len], o_sigma2[:first_seq_len],
+                                                           o_corr[:first_seq_len])
+            loss_l2,pen_acc = graves_output.val_loss(predicted_action[:first_seq_len], x_gt[:first_seq_len], 
+                                                     y_gt[:first_seq_len],pen_down_gt[:first_seq_len])
+            pred_image = utils.plot_stroke_numpy(predicted_action.cpu().numpy())# .transpose(2,0,1)
+            gt_image = utils.plot_stroke_numpy(data_gt[0])# .transpose(2,0,1)
+            
+            name_list = ['data/L2Dist','data/PenAcc','PredictedSeq','GTSeq']
+            value_list = [loss_l2,pen_acc,pred_image,gt_image]
+            utils.write_summaries(name_list, value_list, [0,0,1,1], writer, jter+jter_count)
+    jter_count = jter_count +jter
+    return jter_count
             
         
-def val(val_data_loader,network,graves_output):
+def val(val_data_loader,network,graves_output,writer,jter_count):
     data_fetcher = val_data_loader.get_data_single()
     loss_list = []
     for jter,(data,data_gt) in enumerate(data_fetcher):
@@ -61,15 +92,31 @@ def val(val_data_loader,network,graves_output):
         y_gt = torch.autograd.Variable(torch.FloatTensor(cat_target[:,2]).cuda())
         pen_down_gt = torch.autograd.Variable(torch.FloatTensor(cat_target[:,0]).cuda())
         output = network.forward_unlooped(data,cuda=True)
-        pen_down_prob,o_pi, o_mu1, o_mu2, o_sigma1, o_sigma2, o_corr = graves_output.get_mixture_coef(output)
-        predicted_action = graves_output.sample_action(pen_down_prob,o_pi, o_mu1, o_mu2, o_sigma1, o_sigma2, o_corr)
-        loss_l2,loss_pen = graves_output.val_loss(predicted_action, x_gt, y_gt,pen_down_gt)
-        loss_list.append(loss_l2.cpu().data.numpy())
-        if jter%gv.update_step ==0:
-            print('cur_iter',jter,"cur_loss",loss_l2.cpu().data.numpy(),'loss_pen',loss_pen.cpu().data.numpy())
-    loss = sum(loss_list)/float(jter+1)
         
-    return loss
+        pen_down_prob,o_pi, o_mu1, o_mu2, o_sigma1, o_sigma2, o_corr = graves_output.get_mixture_coef(output)
+        loss_distr,pen_loss = graves_output.loss_distr(pen_down_prob,o_pi, o_mu1, o_mu2, o_sigma1, o_sigma2, o_corr, x_gt, y_gt,pen_down_gt)
+        predicted_action = graves_output.sample_action(pen_down_prob,o_pi, o_mu1, o_mu2, o_sigma1, o_sigma2, o_corr)
+        loss_l2,pen_acc = graves_output.val_loss(predicted_action, x_gt, y_gt,pen_down_gt)
+        
+        loss_list.append(loss_l2.cpu().data.numpy())
+        
+        # Summarization
+        name_list = ['data/LossDistr','data/Lossloss','data/L2Dist','data/PenAcc']
+        value_list = [loss_distr,pen_loss,loss_l2,pen_acc]
+        utils.write_summaries(name_list,value_list, [0]*4, writer, jter+jter_count)
+        
+        if jter%gv.update_step ==0:
+            pred_image = utils.plot_stroke_numpy(predicted_action.cpu().numpy())# .transpose(2,0,1)
+            gt_image = utils.plot_stroke_numpy(data_gt[0])# .transpose(2,0,1)
+            utils.write_summaries(['PredictedSeq','GTSeq'],[pred_image,gt_image],[1,1],writer,jter+jter_count)
+        
+        if jter%gv.update_step ==0:
+            print('cur_iter',jter,"cur_loss",loss_l2.cpu().data.numpy(),'loss_pen',pen_acc.cpu().data.numpy())
+    loss = sum(loss_list)/float(jter+1)
+    print('==========TOTAL VAL LOSS',loss," ====================")
+    jter_count = jter+jter_count
+        
+    return loss,jter
 
 
 def main():
@@ -78,19 +125,32 @@ def main():
     parser.add_argument('--gpu_id', default='0', help='The dataset the class to processed')
     args = parser.parse_args()
     
-    train_data_loader, val_data_loader, network, graves_output,optimizer = setup(bool(args.cuda),int(args.gpu_id))
+    (train_data_loader, val_data_loader, network, graves_output,optimizer,
+        train_writer, test_writer) = setup(bool(args.cuda),int(args.gpu_id))
+    
+    # Everything seems fine. 
+    # make a code log with exp name
+    utils.save_exp_information()
+    
+    # init values
+    train_jter_count,val_jter_count,best_loss = (0,0,np.inf)
+    
     for epoch in range(gv.total_epochs):
         train_st_time = time.time()
         utils.adjust_learning_rate(optimizer, epoch,gv.orig_lr)
         train_data_loader.shuffle_index()
-        train(train_data_loader, network, graves_output,optimizer)
+        train_jter_count = train(train_data_loader, network, graves_output,optimizer,train_writer,train_jter_count)
         print('==========TRAIN Epoch',epoch+1,"COMPLETE ====================")
         print('==========TIME TAKEN: ',time.time()-train_st_time,' =============')
         val_st_time = time.time()
-        loss = val(val_data_loader,network,graves_output)
+        loss,val_jter_count = val(val_data_loader,network,graves_output,test_writer,train_jter_count)
         print('==========val Epoch',epoch+1,"COMPLETE ====================")
         print('==========TIME TAKEN: ',time.time()-val_st_time,' =============')
-        
+        if loss<best_loss:
+            best_loss_ = True
+            best_loss = loss 
+        else:
+            best_loss_ = False
         # add a is best checker
         utils.save_checkpoint({
                'epoch': epoch + 1,
@@ -98,8 +158,9 @@ def main():
                'loss': loss,
                'model_state_dict': network.state_dict(),
                'optimizer' : optimizer.state_dict(),
-            },filename = 'weights/simple_GRU_'+str(epoch+1)+'.pth')
+            },filename = 'weights/simple_GRU_'+str(epoch+1)+'.pth',is_best = best_loss_)
         print('==========Total Time per epoch: ',time.time()-val_st_time,' =============')
+    writer.close()
 
 if __name__== "__main__":
     main()

@@ -116,9 +116,9 @@ class graves_output(nn.Module):
 
         result2 = self.softmax_loss(pen_down_prob,pen_data)
         
-        result = torch.mean(result1)+ self.pen_loss_weight*result2
+        result1 = torch.mean(result1)# + self.pen_loss_weight*result2
         
-        return result
+        return result1,result2
     
     def sample_action(self,pen_down_prob,o_pi, o_mu1, o_mu2, o_sigma1, o_sigma2, o_corr):
         # define action sampling as well
