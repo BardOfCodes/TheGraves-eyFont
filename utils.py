@@ -6,6 +6,7 @@ import datetime
 import os
 import shutil
 import global_variables as gv
+import argparse
 
 def plot_stroke(stroke, save_name=None):
     # Plot a single example.
@@ -61,6 +62,7 @@ def plot_stroke_numpy(stroke, save_name=None):
     cuts = np.where(stroke[:, 0] == 1)[0]
     if cuts.shape[0] ==0:
         cuts = [stroke.shape[0]]
+    start = 0
     for cut_value in cuts:
         ax.plot(x[start:cut_value], y[start:cut_value],
                 'k-', linewidth=3)
@@ -92,13 +94,23 @@ def adjust_learning_rate(optimizer, epoch,orig_lr):
         
         
 def save_exp_information(exp_name=gv.exp_name):
-    files = os.listdir('.')
-    files = [x for x in files if x[-3:]=='.py']
-    ## add folder search later if required.
+    all_files = os.listdir('.')
+    files = [x for x in all_files if x[-3:]=='.py']
+    folders = [x for x in all_files if not '.' in x]
+    
+    ## For Folders
+    for folder in folders:
+        inner_files = os.listdir(folder)
+        add_files = [os.path.join(folder,x) for x in inner_files if x[-3:]=='.py']
+        files.extend(add_files)
+        
     fmt='%m-%d-%H-%M_{fname}'
     dir_name = datetime.datetime.now().strftime(fmt).format(fname=exp_name)
     new_dir = os.path.join(gv.experiment_code_log_folder,dir_name)
     os.system('mkdir '+new_dir)
+    
+    for folder in folders:
+        inner_files = os.system('mkdir ' + os.path.join(new_dir,folder))
     for cur_file in files:
         os.system('cp ' + cur_file+ ' '+ os.path.join(new_dir,cur_file))
         
@@ -111,5 +123,13 @@ def write_summaries(name_list,value_list,type_list, writer, jter):
         elif type_list[iter] ==1:
             # 1 is for images
             writer.add_image(name, value_list[iter], jter)
-            
+    
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--save_exp', default='True', help='The dataset the class to processed')
+    args = parser.parse_args()
+    
+    if args.save_exp == 'True':
+        save_exp_information()
+    
         
