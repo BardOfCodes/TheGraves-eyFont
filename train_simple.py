@@ -3,27 +3,19 @@ import torch.backends.cudnn as cudnn
 import data_loader
 import utils
 import global_variables as gv
-import models.simple_GRU as simple_GRU
-import models.complex_GRU as complex_GRU
-import models.multilinear_complex_GRU as multilinear_complex_GRU
-import data_loaders.data_loader as data_loader
+import models.simple_GRU as GRU
 import argparse
 import os
 import time
 from tensorboardX import SummaryWriter
 import numpy as np
 
-def setup(network,cuda,device_id=0,wt_load='NIL'):
+def setup(cuda,device_id=0,wt_load='NIL'):
     if cuda:
         torch.cuda.set_device(device_id)
-    if network=='simple':
-        network = simple_GRU.network(3,gv.hidden_1_size,gv.output_size)
-    elif network=='complex':
-        network = complex_GRU.network(3,gv.hidden_1_size, gv.hidden_2_size, gv.hidden_3_size, gv.output_size)
-    elif network=='multilinear':
-        network = multilinear_complex_GRU.network(3,gv.hidden_1_size, gv.hidden_2_size, gv.hidden_3_size, gv.output_size)
     train_data_loader = data_loader.dataloader(gv.batch_limit,gv.train_start_index,gv.train_end_index)
     val_data_loader = data_loader.dataloader(gv.batch_limit,gv.val_start_index,gv.val_end_index)
+    network = GRU.network(3,gv.hidden_1_size,gv.output_size)
     network.cuda()
     # init the network with orthogonal init and gluroot.
     if wt_load=="NIL":
@@ -127,13 +119,12 @@ def val(val_data_loader,network,writer,jter_count):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--network', default='simple', help='The dataset the class to processed')
     parser.add_argument('--cuda', default='True', help='The dataset the class to processed')
-    parser.add_argument('--gpu_id', default='2', help='The dataset the class to processed')
+    parser.add_argument('--gpu_id', default='0', help='The dataset the class to processed')
     args = parser.parse_args()
     
     (train_data_loader, val_data_loader, network,optimizer,
-        train_writer, test_writer) = setup(args.network, bool(args.cuda),int(args.gpu_id))
+        train_writer, test_writer) = setup(bool(args.cuda),int(args.gpu_id))
     
     # Everything seems fine. 
     # make a code log with exp name
@@ -141,18 +132,17 @@ def main():
     
     # init values
     train_jter_count,val_jter_count,best_loss = (0,0,np.inf)
-    
+    start_time = time.time()
     for epoch in range(gv.total_epochs):
         train_st_time = time.time()
         utils.adjust_learning_rate(optimizer, epoch,gv.orig_lr)
         train_data_loader.shuffle_index()
         train_jter_count = train(train_data_loader, network, optimizer,train_writer,train_jter_count)
         print('==========TRAIN Epoch',epoch+1,"COMPLETE ====================")
-        print('==========TIME TAKEN: ',time.time()-train_st_time,' =============')
         val_st_time = time.time()
         loss,val_jter_count = val(val_data_loader,network,test_writer,train_jter_count)
         print('==========val Epoch',epoch+1,"COMPLETE ====================")
-        print('==========TIME TAKEN: ',time.time()-val_st_time,' =============')
+        print('==========TIME FROM START: ',time.time()-start_time,' =============')
         if loss<best_loss:
             print('========== BEST MODEL TILL NOW! =============')
             best_loss_ = True
@@ -166,8 +156,8 @@ def main():
                'loss': loss,
                'model_state_dict': network.state_dict(),
                'optimizer' : optimizer.state_dict(),
-            },filename = 'weights/final_'+args.network+'_GRU_'+str(epoch+1)+'.pth',is_best = best_loss_)
-        print('==========Total Time per epoch: ',time.time()-val_st_time,' =============')
+            },filename = 'weights/the_real_simple_GRU_'+str(epoch+1)+'.pth',is_best = best_loss_)
+        print('==========Total Time for epoch: ',time.time()-val_st_time,' =============')
     train_writer.close()
     test_writer.close()
 

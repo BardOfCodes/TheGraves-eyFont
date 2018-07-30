@@ -1,5 +1,7 @@
 # models script
 import torch
+import sys
+sys.path.insert(0,'..')
 import torchvision.models as models
 from torch.autograd import Variable
 import torch.nn.init as init
@@ -32,7 +34,7 @@ class network(nn.Module):
            if 'gru' in name and 'weight' in name:
                init.orthogonal(param);
            elif 'linear' in name:
-               init.normal(param,0,math.sqrt(2./float(gv.gru_size+121)))
+               init.normal(param,0,math.sqrt(2./float(self.hidden_size_1+121)))
 
     def forward_unlooped(self,data, train=True,cuda=True):
         
@@ -43,13 +45,14 @@ class network(nn.Module):
         else:
             seq_tensor = Variable(torch.zeros((limit,len(data),3)))
         sorted_ind = np.argsort(seq_lengths)[::-1]
-        for idx, (sample, seqlen) in enumerate(zip(data, seq_lengths)):
-            if cuda:
-                seq_tensor[:seqlen, sorted_ind[idx], :] = torch.FloatTensor(sample).cuda()
-            else:
-                seq_tensor[:seqlen, sorted_ind[idx], :] = torch.FloatTensor(sample)
-    
         seq_lengths.sort(reverse=True)
+        for idx, seqlen in enumerate(seq_lengths):
+            sample = data[sorted_ind[idx]]
+            if cuda:
+                seq_tensor[:seqlen, idx, :] = torch.FloatTensor(sample).cuda()
+            else:
+                seq_tensor[:seqlen, idx, :] = torch.FloatTensor(sample)
+    
         pack = torch.nn.utils.rnn.pack_padded_sequence(seq_tensor,seq_lengths)
         if cuda:
             hx = torch.autograd.Variable(torch.zeros(1,len(data), self.hidden_size_1).cuda()) 
@@ -64,6 +67,7 @@ class network(nn.Module):
         for j in unsort_pattrn:
             inp_linear.append(unpacked[:unpacked_len[j],j,:])
         #print(inp_linear[0].size(),inp_linear[1].size())
+        # inp_linear = self.relu(inp_linear)
         inp_linear = torch.cat(inp_linear,0)
         
         output = self.linear(self.relu(inp_linear))
@@ -90,7 +94,21 @@ class network(nn.Module):
         return actions
         
     
+def test():
+    torch.cuda.set_device(0)
+    data = [np.random.uniform(size=(500,3)),np.random.uniform(size=(556,3)),np.random.uniform(size=(226,3))]
+    net = network(3,900,122)
+    net.cuda()
+    output = net.forward_unlooped(data,cuda=True)
+    print('Unlooped Done!',output.size())
+    output = net.forward_looped(5,700)
+    print("Looped Done!",output.size())
 
 
+    
+if __name__ == '__main__':
+    test()
+
+    
     
 

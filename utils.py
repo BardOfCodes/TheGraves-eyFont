@@ -78,17 +78,17 @@ def plot_stroke_numpy(stroke, save_name=None):
     pyplot.close()
     return data
 
-def save_checkpoint(state, is_best=False, filename='checkpoint.pth'):
+def save_checkpoint(state,best_name=gv.exp_name, is_best=False, filename='checkpoint.pth'):
     torch.save(state, filename)
     if is_best:
-        shutil.copyfile(filename, 'weights/simple_GRU_best.pth')
+        shutil.copyfile(filename, 'weights/best_'+best_name+'.pth')
         
         
         
 
 def adjust_learning_rate(optimizer, epoch,orig_lr):
     """Sets the learning rate to the initial LR decayed by 10 every 3 epochs"""
-    lr = orig_lr * (0.1 ** (epoch))
+    lr = orig_lr * (0.1 ** (epoch//gv.reduction_epoch))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
         

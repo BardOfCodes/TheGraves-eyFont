@@ -90,7 +90,11 @@ class network(nn.Module):
             else:
                 sigma = torch.Tensor([sigma_up,sigma_down])
             m = mn.MultivariateNormal(torch.Tensor([cur_mu1,cur_mu2]), sigma)
-            actions.append(m.sample().cuda())
+            try:
+                action = m.sample().cuda()
+            except:
+                action = torch.Tensor([cur_mu1,cur_mu2]).cuda()
+            actions.append(action)
         actions = torch.stack(actions,0)
         # print(type(pen_out))
         actions = torch.cat((pen_out,actions),1)

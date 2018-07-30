@@ -22,8 +22,8 @@ class network(nn.Module):
         super(network, self).__init__()
         self.gru_1 = nn.GRU(inp_size, hidden_size_1)
         self.gru_2 = nn.GRU(hidden_size_1+inp_size, hidden_size_2)
-        self.gru_3 = nn.GRU(hidden_size_2+inp_size,hidden_size_3)
-        self.linear_1 = nn.Linear(hidden_size_3+hidden_size_2+hidden_size_1,output_size)
+        self.linear_1 = nn.Linear(hidden_size_2+inp_size,hidden_size_3)
+        self.linear_2 = nn.Linear(hidden_size_3+hidden_size_2+hidden_size_1,output_size)
         self.inp_size = inp_size
         self.hidden_size_1 = hidden_size_1
         self.hidden_size_2 = hidden_size_2
@@ -60,16 +60,13 @@ class network(nn.Module):
                 seq_tensor[:seqlen, idx, :] = torch.FloatTensor(sample).cuda()
             else:
                 seq_tensor[:seqlen, idx, :] = torch.FloatTensor(sample)
-    
         inp_1 = torch.nn.utils.rnn.pack_padded_sequence(seq_tensor,seq_lengths)
         if cuda:
             hx_1 = torch.autograd.Variable(torch.zeros(1,len(data), self.hidden_size_1).cuda()) 
             hx_2 = torch.autograd.Variable(torch.zeros(1,len(data), self.hidden_size_2).cuda()) 
-            hx_3 = torch.autograd.Variable(torch.zeros(1,len(data), self.hidden_size_3).cuda()) 
         else:
             hx = torch.autograd.Variable(torch.zeros(1,len(data), self.hidden_size_1))   
             hx_2 = torch.autograd.Variable(torch.zeros(1,len(data), self.hidden_size_2)) 
-            hx_3 = torch.autograd.Variable(torch.zeros(1,len(data), self.hidden_size_3)) 
         
         ########################## 1st GRU
         hidden_1 = self.gru_1(inp_1, hx_1)
@@ -82,31 +79,29 @@ class network(nn.Module):
         hidden_2 = self.gru_2(inp_2, hx_2)
         unpacked_2, unpacked_len = torch.nn.utils.rnn.pad_packed_sequence(hidden_2[0])
         
-        ######################### 3rd GRU
-        inp_3 = torch.cat([unpacked_2,seq_tensor],2)
-        inp_3 = self.relu(inp_3)
-        inp_3 = torch.nn.utils.rnn.pack_padded_sequence(inp_3,seq_lengths)
-        hidden_3 = self.gru_3(inp_3, hx_3)
-        unpacked_3, unpacked_len = torch.nn.utils.rnn.pad_packed_sequence(hidden_3[0])
         
         unsort_pattrn  = np.argsort(sorted_ind)
         base_inp = []
         hidden_1 = []
         hidden_2 = []
-        hidden_3 = []
+        inp_linear = []
         for j in unsort_pattrn:
-            hidden_3.append(unpacked_3[:unpacked_len[j],j,:])
             hidden_2.append(unpacked_2[:unpacked_len[j],j,:])
             hidden_1.append(unpacked_1[:unpacked_len[j],j,:])
+            inp_linear.append(seq_tensor[:unpacked_len[j],j,:])
         #print(inp_linear[0].size(),inp_linear[1].size())
         hidden_1 = torch.cat(hidden_1,0)
         hidden_2 = torch.cat(hidden_2,0)
-        hidden_3 = torch.cat(hidden_3,0)
+        inp_linear = torch.cat(inp_linear,0)
         
+        ############################ 3th Linear
+        inp_3 = torch.cat([hidden_2,inp_linear],1)
+        inp_3 = self.relu(inp_3)
+        output = self.linear_1(inp_3)
         ############################ 4th Linear
-        inp_4 = torch.cat([hidden_3,hidden_2,hidden_1],1)
+        inp_4 = torch.cat([output,hidden_2,hidden_1],1)
         inp_4 = self.relu(inp_4)
-        output = self.linear_1(inp_4)
+        output = self.linear_2(inp_4)
         
         return output
     
@@ -124,19 +119,21 @@ class network(nn.Module):
         jter = 0
         actions = []
         while (jter<pred_limit):
+            
             output_1,hx_1 = self.gru_1(inp_1, hx_1)
             
             inp_2 = torch.cat([output_1,inp_1],2)
             inp_2 = self.relu(inp_2)
             output_2,hx_2 = self.gru_2(inp_2,hx_2)
             
-            inp_3 = torch.cat([output_2,inp_1],2)
-            inp_3 = self.relu(inp_3)
-            output_3, hx_3 = self.gru_3(inp_3, hx_3)
             
-            inp_4 = torch.cat([output_3[0],output_2[0],output_1[0]],1)
+            inp_3 = torch.cat([output_2[0],inp_1[0]],1)
+            inp_3 = self.relu(inp_3)
+            output_3 = self.linear_1(inp_3)
+            
+            inp_4 = torch.cat([output_3,output_2[0],output_1[0]],1)
             inp_4 = self.relu(inp_4)
-            output = self.linear_1(inp_4)
+            output = self.linear_2(inp_4)
             
             pen_down_prob,o_pi, o_mu1, o_mu2, o_sigma1, o_sigma2, o_corr = self.go.get_mixture_coef(output)
             predicted_action = self.go.sample_action(pen_down_prob,o_pi, o_mu1, o_mu2, o_sigma1, o_sigma2, o_corr,no_sigma=no_sigma)
@@ -148,8 +145,8 @@ class network(nn.Module):
         
 def test():
     torch.cuda.set_device(0)
-    data = [np.random.uniform(size=(500,3)),np.random.uniform(size=(556,3)),np.random.uniform(size=(226,3))]
-    net = network(3,256,512,256,122)
+    data = [np.random.uniform(size=(400,3)),np.random.uniform(size=(500,3)),np.random.uniform(size=(200,3))]
+    net = network(3,400,400,400,122)
     net.cuda()
     output = net.forward_unlooped(data,cuda=True)
     print('Unlooped Done!',output.size())

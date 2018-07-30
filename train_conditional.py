@@ -3,27 +3,24 @@ import torch.backends.cudnn as cudnn
 import data_loader
 import utils
 import global_variables as gv
-import models.simple_GRU as simple_GRU
-import models.complex_GRU as complex_GRU
-import models.multilinear_complex_GRU as multilinear_complex_GRU
-import data_loaders.data_loader as data_loader
+import models.conditional_complex_GRU as complex_GRU
+import models.conditional_multilinear_GRU as multilinear_GRU
+import data_loaders.data_loader_conditioned as data_loader
 import argparse
 import os
 import time
 from tensorboardX import SummaryWriter
 import numpy as np
 
-def setup(network,cuda,device_id=0,wt_load='NIL'):
+def setup(network, cuda,device_id=0,wt_load='NIL'):
     if cuda:
         torch.cuda.set_device(device_id)
-    if network=='simple':
-        network = simple_GRU.network(3,gv.hidden_1_size,gv.output_size)
-    elif network=='complex':
-        network = complex_GRU.network(3,gv.hidden_1_size, gv.hidden_2_size, gv.hidden_3_size, gv.output_size)
-    elif network=='multilinear':
-        network = multilinear_complex_GRU.network(3,gv.hidden_1_size, gv.hidden_2_size, gv.hidden_3_size, gv.output_size)
     train_data_loader = data_loader.dataloader(gv.batch_limit,gv.train_start_index,gv.train_end_index)
     val_data_loader = data_loader.dataloader(gv.batch_limit,gv.val_start_index,gv.val_end_index)
+    if network=="complex":
+        network = complex_GRU.network(3,gv.hidden_1_size,gv.hidden_2_size,gv.hidden_3_size,gv.output_size)
+    elif network=="multilinear":
+        network = multilinear_GRU.network(3,gv.hidden_1_size,gv.hidden_2_size,gv.hidden_3_size,gv.output_size)
     network.cuda()
     # init the network with orthogonal init and gluroot.
     if wt_load=="NIL":
@@ -47,12 +44,12 @@ def train(train_data_loader, network,optimizer,writer,jter_count):
     
     data_fetcher = train_data_loader.get_data()
     count = 0
-    for jter,(data,data_gt) in enumerate(data_fetcher):
+    for jter,(data,data_gt,characters) in enumerate(data_fetcher):
         cat_target = np.concatenate(data_gt,axis=0)
         x_gt = torch.autograd.Variable(torch.FloatTensor(cat_target[:,1]).cuda())
         y_gt = torch.autograd.Variable(torch.FloatTensor(cat_target[:,2]).cuda())
         pen_down_gt = torch.autograd.Variable(torch.LongTensor(cat_target[:,0]).cuda())
-        output = network.forward_unlooped(data,cuda=True)
+        output = network.forward_unlooped(data,characters,cuda=True)
         
         pen_down_prob,o_pi, o_mu1, o_mu2, o_sigma1, o_sigma2, o_corr = network.go.get_mixture_coef(output)
         loss_distr,pen_loss = network.go.loss_distr(pen_down_prob,o_pi, o_mu1, o_mu2, o_sigma1, o_sigma2, o_corr, x_gt, y_gt,pen_down_gt)
@@ -62,6 +59,12 @@ def train(train_data_loader, network,optimizer,writer,jter_count):
         # compute gradient and do SGD step
         optimizer.zero_grad()
         total_loss.backward()
+        # grad clipping
+        # for name, param in network.named_parameters():
+        #     if 'gru' in name:
+        #         param.grad.clamp_(-10, 10)
+        #     elif 'linear' in name:
+        #         param.grad.clamp_(-100, 100)
         optimizer.step()
         
         
@@ -92,12 +95,12 @@ def train(train_data_loader, network,optimizer,writer,jter_count):
 def val(val_data_loader,network,writer,jter_count):
     data_fetcher = val_data_loader.get_data_single()
     loss_list = []
-    for jter,(data,data_gt) in enumerate(data_fetcher):
+    for jter,(data,data_gt,characters) in enumerate(data_fetcher):
         cat_target = np.concatenate(data_gt,axis=0)
         x_gt = torch.autograd.Variable(torch.FloatTensor(cat_target[:,1]).cuda())
         y_gt = torch.autograd.Variable(torch.FloatTensor(cat_target[:,2]).cuda())
         pen_down_gt = torch.autograd.Variable(torch.LongTensor(cat_target[:,0]).cuda())
-        output = network.forward_unlooped(data,cuda=True)
+        output = network.forward_unlooped(data,characters,cuda=True)
         
         pen_down_prob,o_pi, o_mu1, o_mu2, o_sigma1, o_sigma2, o_corr = network.go.get_mixture_coef(output)
         loss_distr,pen_loss = network.go.loss_distr(pen_down_prob,o_pi, o_mu1, o_mu2, o_sigma1, o_sigma2, o_corr, x_gt, y_gt,pen_down_gt)
@@ -127,8 +130,8 @@ def val(val_data_loader,network,writer,jter_count):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--network', default='simple', help='The dataset the class to processed')
     parser.add_argument('--cuda', default='True', help='The dataset the class to processed')
+    parser.add_argument('--network', default='multilinear', help='The dataset the class to processed')
     parser.add_argument('--gpu_id', default='2', help='The dataset the class to processed')
     args = parser.parse_args()
     
@@ -166,7 +169,7 @@ def main():
                'loss': loss,
                'model_state_dict': network.state_dict(),
                'optimizer' : optimizer.state_dict(),
-            },filename = 'weights/final_'+args.network+'_GRU_'+str(epoch+1)+'.pth',is_best = best_loss_)
+            },filename = 'weights/'+gv.exp_name+'_'+str(epoch+1)+'.pth',is_best = best_loss_)
         print('==========Total Time per epoch: ',time.time()-val_st_time,' =============')
     train_writer.close()
     test_writer.close()
