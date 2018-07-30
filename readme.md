@@ -10,6 +10,8 @@ A simple implementation of [Generating Sequences With Recurrent Neural Networks]
 
 Experiment Docs: [Google Doc](https://docs.google.com/document/d/1HpNZtQtLDDAM9jQ106UIA4NGUZ2Xedkjni9cu1K8n6U/edit?usp=sharing)
 
+Experiment Slides: [Google Slides](https://docs.google.com/presentation/d/1uS5VWx0Xw61nqVMkHyiOVLBMG1RDt8f02TQLJpUGKuM/edit?usp=sharing)
+
 ## Training Details:
 
 * 3 Variants of Architecture tried:
