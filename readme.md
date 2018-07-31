@@ -65,7 +65,7 @@ But change the text, and you still get the same output.
 
 So, conditioning is not learnt in this way. Self-generation is even more gibberish:
 
-![alt](misc/conditional_hw_3.png)
+![alt](misc/conditional_hw_2.png)
 
 
 #### Next steps:
