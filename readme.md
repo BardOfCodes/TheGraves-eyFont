@@ -53,3 +53,25 @@ From Paper:
 
 ## 2: Conditional Generation
 
+For conditional Generation, we modify the paper architecture slightly to the one below, for enabling parallel forward pass of all time steps.
+
+![alt](misc/architecture.png)
+
+Cherry picking from the val set, we get:
+
+![alt](misc/conditional_hw_1.png)
+
+But change the text, and you still get the same output.
+
+So, conditioning is not learnt in this way. Self-generation is even more gibberish:
+
+![alt](misc/conditional_hw_3.png)
+
+
+#### Next steps:
+
+1) Model matching paper architecture in training.
+2) Try a simple gaussian over the sequence of encoding based on the cur time step, instead of the long route the paper takes to see if it is useful.
+2) What if we pretrain the conditional gaussians to first get the soft encoding similar to ground truth encoding based on the location of the gaussians?
+
+

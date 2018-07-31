@@ -198,6 +198,7 @@ class network(nn.Module):
             jter+=1
         actions = torch.stack(actions,0)
         return actions
+    
         
 def test():
     torch.cuda.set_device(0)

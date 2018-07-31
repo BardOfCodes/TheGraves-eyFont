@@ -19,7 +19,7 @@ class network(nn.Module):
     def __init__(self,pen_loss_lambda = gv.pen_loss_lambda, pen_loss_weight=gv.pen_loss_weight):
         super(network, self).__init__()
         # add balancing
-        self.softmax_loss = torch.nn.CrossEntropyLoss(weight=torch.Tensor(pen_loss_weight))
+        self.softmax_loss = torch.nn.CrossEntropyLoss(weight=torch.Tensor(pen_loss_weight), reduction='none')
         self.pen_loss_lambda = pen_loss_lambda
         
         
@@ -52,7 +52,7 @@ class network(nn.Module):
         result = result/denom
         return result
 
-    def loss_distr(self,pen_down_prob, z_pi, z_mu1, z_mu2, z_sigma1, z_sigma2, z_corr,x1_data, x2_data,pen_data):
+    def loss_distr(self,pen_down_prob, z_pi, z_mu1, z_mu2, z_sigma1, z_sigma2, z_corr,x1_data, x2_data,pen_data,loss_mean=True):
         x1_data = torch.stack((x1_data,)*20,1)
         x2_data = torch.stack((x2_data,)*20,1)
 
@@ -61,10 +61,12 @@ class network(nn.Module):
         epsilon = 1e-6
         result1 = torch.sum(result1, 1) + epsilon
         result1 = -torch.log(result1)  # avoid log(0)
-
-        result2 = self.softmax_loss(pen_down_prob,pen_data)
-        
-        result1 = torch.mean(result1)# + self.pen_loss_weight*result2
+        if loss_mean:
+            result1 = torch.mean(result1)# + self.pen_loss_weight*result2
+            result2 = self.softmax_loss(pen_down_prob,pen_data)
+        else:
+            result2 = self.softmax_loss(pen_down_prob,pen_data)
+            
         
         return result1,result2
     

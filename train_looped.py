@@ -52,23 +52,9 @@ def train(train_data_loader, network,optimizer,writer,jter_count):
         x_gt = torch.autograd.Variable(torch.FloatTensor(cat_target[:,1]).cuda())
         y_gt = torch.autograd.Variable(torch.FloatTensor(cat_target[:,2]).cuda())
         pen_down_gt = torch.autograd.Variable(torch.LongTensor(cat_target[:,0]).cuda())
-        output = network.forward_unlooped(data,characters,cuda=True)
         
-        pen_down_prob,o_pi, o_mu1, o_mu2, o_sigma1, o_sigma2, o_corr = network.go.get_mixture_coef(output)
-        loss_distr,pen_loss = network.go.loss_distr(pen_down_prob,o_pi, o_mu1, o_mu2, o_sigma1, o_sigma2, o_corr, x_gt, y_gt,pen_down_gt)
+        output,loss_distr,pen_loss = network.forward_unlooped_trainer(data,data_gt,characters,optimizer, cuda=True)
         
-        total_loss = loss_distr + pen_loss
-        
-        # compute gradient and do SGD step
-        optimizer.zero_grad()
-        total_loss.backward()
-        # grad clipping
-        # for name, param in network.named_parameters():
-        #     if 'gru' in name:
-        #         param.grad.clamp_(-10, 10)
-        #     elif 'linear' in name:
-        #         param.grad.clamp_(-100, 100)
-        optimizer.step()
         
         
         # Summarization
@@ -79,6 +65,8 @@ def train(train_data_loader, network,optimizer,writer,jter_count):
             # add the handwriting pred and gt
             first_seq_len = data[0].shape[0]
             output = output[:first_seq_len]
+            
+            pen_down_prob,o_pi, o_mu1, o_mu2, o_sigma1, o_sigma2, o_corr = network.go.get_mixture_coef(output)
             predicted_action = network.go.sample_action(pen_down_prob[:first_seq_len],o_pi[:first_seq_len],
                                                            o_mu1[:first_seq_len], o_mu2[:first_seq_len], 
                                                            o_sigma1[:first_seq_len], o_sigma2[:first_seq_len],
@@ -134,7 +122,7 @@ def val(val_data_loader,network,writer,jter_count):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--cuda', default='True', help='The dataset the class to processed')
-    parser.add_argument('--network', default='multilinear', help='The dataset the class to processed')
+    parser.add_argument('--network', default='complexer', help='The dataset the class to processed')
     parser.add_argument('--gpu_id', default='0', help='The dataset the class to processed')
     args = parser.parse_args()
     

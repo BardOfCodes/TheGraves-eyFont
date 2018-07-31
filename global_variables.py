@@ -5,7 +5,7 @@ data_loc = 'data/strokes.npy'
 char_loc = 'data/sentences.txt'
 means = (0.039828256, 0.41248125)
 stds = (0.19555554, 2.0786476)
-batch_limit = 10000
+batch_limit = 6000
 train_start_index = 0
 train_end_index = 5500
 val_start_index = 5500
@@ -30,6 +30,6 @@ reduction_epoch = 5
 
 ############## log details
 experiment_code_log_folder = 'logs/code' 
-exp_name = "ConditionalComplexBalancedGRU"
-update_step = 200
+exp_name = "ConditionalComplexerApproxGRU"
+update_step = 50
 tensorboardX_dir = 'logs/tensorboardX'
